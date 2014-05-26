@@ -228,8 +228,40 @@ class Command(BaseCommand):
 
         self.detect_duplicate_services(srv_list)
 
+        additional_root_services = [
+            {
+                'name_fi': 'Asuminen ja kaupunkiympäristö',
+                'name_en': 'Housing and urban environment',
+                'id': 999999
+
+            },
+            {
+                'name_fi': 'Työ, talous ja hallinto',
+                'name_en': 'Employment, economy and administration',
+                'id': 999998
+            },
+            {
+                'name_fi': 'Kulttuuri, liikunta ja vapaa-aika',
+                'name_en': 'Culture, sports and leisure',
+                'id': 999997
+            },
+            {
+                'name_fi': 'Liikenne ja kartat',
+                'name_en': 'Traffic and maps',
+                'id': 999996
+            },
+        ]
+
+        service_to_new_root = {
+            25298: 999999, 25142: 999999,
+            26098: 999998, 26300: 999998, 26244: 999998,
+            25622: 999997, 28128: 999997, 25954: 999997,
+            25554: 999996, 25476: 999996
+        }
+
         dupes = []
-        for d in srv_list:
+
+        def handle_service(d):
             obj = syncher.get(d['id'])
             if not obj:
                 obj = Service(id=d['id'])
@@ -248,6 +280,11 @@ class Command(BaseCommand):
 
             self._set_field(obj, 'identical_to_id', d['identical_to'])
 
+            new_root = service_to_new_root.get(d['id'])
+            if new_root:
+                print("Setting root %s for service %s" % (new_root, d['id']))
+                d['parent_id'] = new_root
+
             if 'parent_id' in d:
                 parent = syncher.get(d['parent_id'])
                 assert parent
@@ -260,6 +297,11 @@ class Command(BaseCommand):
             if obj._changed:
                 obj.save()
             syncher.mark(obj)
+
+        for d in additional_root_services:
+            handle_service(d)
+        for d in srv_list:
+            handle_service(d)
 
         for obj, master_id in dupes:
             obj.identical_to_id = master_id
