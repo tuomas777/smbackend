@@ -107,6 +107,7 @@ class Command(BaseCommand):
         if noop:
             return
 
+        changed_ids = set()
         for d in obj_list:
             obj = syncher.get(d['id'])
             if not obj:
@@ -121,10 +122,12 @@ class Command(BaseCommand):
                 obj.data_source_url = url
 
             if obj._changed:
+                changed_ids.add(obj.id)
                 obj.save()
             syncher.mark(obj)
 
         syncher.finish()
+        return changed_ids
 
     @db.transaction.atomic
     def import_departments(self, noop=False):
@@ -134,6 +137,7 @@ class Command(BaseCommand):
         if noop:
             return
 
+        changed_ids = set()
         for d in obj_list:
             obj = syncher.get(d['id'])
             if not obj:
@@ -154,10 +158,12 @@ class Command(BaseCommand):
                 obj.organization = org_obj
 
             if obj._changed:
+                changed_ids.add(obj.id)
                 obj.save()
             syncher.mark(obj)
 
         syncher.finish()
+        return changed_ids
 
     def mark_service_depths(self, service_dict, srv, level):
         srv['level'] = level
@@ -279,7 +285,7 @@ class Command(BaseCommand):
         }
 
         dupes = []
-
+        changed_ids = set()
         def handle_service(d):
             obj = syncher.get(d['id'])
             if not obj:
@@ -317,6 +323,7 @@ class Command(BaseCommand):
             if obj._changed:
                 obj.unit_count = obj.get_unit_count()
                 obj.last_modified_time = datetime.now(UTC_TIMEZONE)
+                changed_ids.add(obj.id)
                 obj.save()
                 self.services_changed = True
             syncher.mark(obj)
@@ -331,6 +338,7 @@ class Command(BaseCommand):
             obj.save(update_fields=['identical_to'])
 
         syncher.finish()
+        return changed_ids
 
     def _save_searchwords(self, obj, info, language):
         field_name = 'extra_searchwords_%s' % language
@@ -482,6 +490,7 @@ class Command(BaseCommand):
             obj._changed = True
             obj.location = location
 
+        object_was_changed = False
         if obj._changed:
             if obj._created:
                 verb = "created"
@@ -490,6 +499,7 @@ class Command(BaseCommand):
             if self.verbosity:
                 print("%s %s" % (obj, verb))
             obj.origin_last_modified_time = datetime.now(UTC_TIMEZONE)
+            object_was_changed = True
             obj._changed = False
             obj.save()
 
@@ -583,10 +593,12 @@ class Command(BaseCommand):
         """
 
         if obj._changed:
+            object_was_changed = True
             obj.origin_last_modified_time = datetime.now(UTC_TIMEZONE)
             obj.save(update_fields=update_fields)
 
         syncher.mark(obj)
+        return object_was_changed
 
     def _fetch_units(self):
         if hasattr(self, 'unit_list'):
@@ -662,13 +674,16 @@ class Command(BaseCommand):
         self.gps_to_target_ct = CoordTransform(gps_srs, target_srs)
 
         syncher = ModelSyncher(queryset, lambda obj: obj.id)
+        changed_ids = set()
         for idx, info in enumerate(obj_list):
             conn_list = conn_by_unit.get(info['id'], [])
             info['connections'] = conn_list
             acp_list = acc_by_unit.get(info['id'], [])
             info['accessibility_properties'] = acp_list
-            self._import_unit(syncher, info)
+            if self._import_unit(syncher, info)
+                changed_ids.add(info['id'])
         syncher.finish()
+        return changed_ids
 
     def import_aliases(self):
         path = os.path.join(settings.BASE_DIR, 'data', 'school_ids.csv')

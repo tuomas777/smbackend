@@ -55,6 +55,14 @@ class UnitIndex(ServiceMapBaseIndex):
     def get_updated_field(self):
         return 'origin_last_modified_time'
 
+    def prepare_extra_searchwords(self, obj):
+        parent = super(UnitIndex, self)
+        results = [parent.prepare_extra_searchwords(obj)]
+        for service in obj.services.all():
+            results.append(parent.prepare_extra_searchwords(service))
+        result = ' '.join(results)
+        return result
+
 class ServiceIndex(ServiceMapBaseIndex):
 
     def __init__(self, *args, **kwargs):
