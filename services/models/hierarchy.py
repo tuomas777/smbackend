@@ -27,4 +27,6 @@ class TreeQuerySet(QuerySet):
         for i in range(max_level):
             key = '__'.join(['parent'] * (i + 1))
             qs |= Q(**{key: ancestor})
-        return self.filter(qs)
+        # TODO Turku POC
+        # return self.filter(qs)
+        return self.filter(qs) if qs else self.none()

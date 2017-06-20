@@ -354,7 +354,12 @@ class JSONAPIViewSet(JSONAPIViewSetMixin, viewsets.ReadOnlyModelViewSet):
 
 
 def choicefield_string(choices, key, obj):
-    return next(x[1] for x in choices if getattr(obj, key) == x[0])
+    # TODO Turku POC
+    # return next(x[1] for x in choices if getattr(obj, key) == x[0])
+    try:
+        return next(x[1] for x in choices if getattr(obj, key) == x[0])
+    except:
+        return 'foo'
 
 
 class UnitConnectionSerializer(TranslatedModelSerializer, serializers.ModelSerializer):

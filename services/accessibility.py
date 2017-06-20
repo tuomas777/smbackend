@@ -10,9 +10,12 @@ class AccessibilityRules(object):
         self.tree = None
         self.messages = None
     def get_data(self):
-        if self.is_data_file_modified():
-            self._parse()
-        return self.tree, self.messages
+        # TODO Turku POC
+        # if self.is_data_file_modified():
+        #     self._parse()
+        # return self.tree, self.messages
+        return (None, None)
+
     def is_data_file_modified(self):
         datafile = self.find_data_file(self.filename)
         new_time = os.path.getmtime(datafile)
