@@ -135,3 +135,17 @@ GDAL_LIBRARY_PATH = "/usr/local/lib/libgdal.dylib"
 import ctypes
 ctypes.CDLL(GDAL_LIBRARY_PATH)
 ```
+
+
+Turku POC
+=========
+
+Importing
+---------
+
+```
+./manage.py geo_import finland --municipalities
+./manage.py turku_import addresses
+./manage.py turku_import organizations
+./manage.py turku_import units_and_services
+```
