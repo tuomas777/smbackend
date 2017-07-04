@@ -82,7 +82,7 @@ def import_units_and_services():
                 new_service_data['last_modified_time'] = timezone.now()
                 new_service_data['id'] = random.randint(1, 10000000)
                 service_obj, created = OntologyTreeNode.objects.get_or_create(
-                    name=new_service_data['name'], defaults=new_service_data
+                    name=new_service_data.get('name', '- Ei saatavilla -'), defaults=new_service_data
                 )
                 if created:
                     num_of_services += 1
