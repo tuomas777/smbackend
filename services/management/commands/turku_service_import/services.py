@@ -4,15 +4,16 @@ import pytz
 from munigeo.importer.sync import ModelSyncher
 
 from services.management.commands.services_import.keyword import KeywordHandler
-from services.management.commands.turku_service_import.utils import set_field, \
+from services.management.commands.turku_service_import.utils import set_tku_translated_field, set_field, \
     get_turku_resource
-from services.models import ServiceNode
+from services.models import ServiceNode, Service
 
 UTC_TIMEZONE = pytz.timezone('UTC')
 
 
 class ServiceImporter:
     nodesyncher = ModelSyncher(ServiceNode.objects.all(), lambda obj: obj.ext_id)
+    servicesyncher = ModelSyncher(Service.objects.all(), lambda obj: obj.id)
 
     def __init__(self, logger=None, importer=None):
         self.logger = logger
@@ -21,6 +22,7 @@ class ServiceImporter:
     def import_services(self):
         keyword_handler = KeywordHandler(logger=self.logger)
         self._import_service_nodes(keyword_handler)
+        self._import_services(keyword_handler)
 
     def _import_service_nodes(self, keyword_handler):
         service_classes = get_turku_resource('palveluluokat')
@@ -32,6 +34,12 @@ class ServiceImporter:
                 latest_node_id = latest_node.id
             self._handle_service_node(parent_node, keyword_handler, latest_node_id)
         self.nodesyncher.finish()
+
+    def _import_services(self, keyword_handler):
+        services = get_turku_resource('palvelut')
+        for service in services:
+            self._handle_service(service, keyword_handler)
+        self.servicesyncher.finish()
 
     def _save_object(self, obj):
         if obj._changed:
@@ -96,6 +104,25 @@ class ServiceImporter:
             obj.unit_count = unit_count
             return True
         return False
+
+    def _handle_service(self, service, keyword_handler):
+        koodi = int(service['koodi'])  # Cast to int as koodi should always be a stringified integer
+        obj = self.servicesyncher.get(koodi)
+        if not obj:
+            obj = Service(
+                id=koodi,
+                clarification_enabled=False,
+                period_enabled=False
+            )
+            obj._changed = True
+
+        obj._changed |= set_tku_translated_field(obj, 'name', service, 'nimi_kieliversiot')
+
+        obj._changed = keyword_handler.sync_searchwords(obj, service, obj._changed)
+        obj._changed |= self._update_object_unit_count(obj)
+
+        self._save_object(obj)
+        self.servicesyncher.mark(obj)
 
 
 def import_services(**kwargs):

@@ -37,6 +37,26 @@ def get_turku_resource(resource_name):
     return get_resource(url, headers)
 
 
+def set_tku_translated_field(obj, obj_field_name, entry, entry_field_name, max_length=None):
+    has_changed = False
+    field_data = entry[entry_field_name]
+
+    for language, raw_value in field_data.items():
+        value = clean_text(raw_value)
+
+        if max_length and value and len(value) > max_length:
+            value = None
+
+        obj_key = '{}_{}'.format(obj_field_name, language)
+        obj_value = getattr(obj, obj_key)
+
+        if obj_value == value:
+            continue
+        has_changed = True
+        setattr(obj, obj_key, value)
+    return has_changed
+
+
 def set_field(obj, obj_field_name, entry, entry_field_name):
     entry_value = entry[entry_field_name]
     value = clean_text(entry_value)
