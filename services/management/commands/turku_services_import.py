@@ -2,14 +2,17 @@
 import logging
 import sys
 
+from django import db
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import translation
 
+from services.management.commands.turku_service_import.services import import_services
+
 
 class Command(BaseCommand):
     help = "Import services from City of Turku APIs"
-    importer_types = []
+    importer_types = ['services', ]
     supported_languages = [l[0] for l in settings.LANGUAGES]
 
     def __init__(self):
@@ -30,6 +33,10 @@ class Command(BaseCommand):
                             default=False, help='cache HTTP requests')
         parser.add_argument('--single', action='store', dest='id',
                             default=False, help='import only single entity')
+
+    @db.transaction.atomic
+    def import_services(self):
+        return import_services(logger=self.logger, noop=False, importer=self)
 
     # Activate the default language for the duration of the import
     # to make sure translated fields are populated correctly.
