@@ -8,6 +8,8 @@ from django.conf import settings
 
 # TODO: Change to production endpoint when available
 TURKU_BASE_URL = 'https://testidigiaurajoki.turku.fi/kuntapalvelut/api/v1/'
+ACCESSIBILITY_BASE_URL = 'https://asiointi.hel.fi/kapaesteettomyys_testi/api/v1/'
+
 
 def get_resource(url, headers=None):
     print("CALLING URL >>> ", url)
@@ -29,6 +31,32 @@ def get_turku_api_headers(content=''):
         'X-TURKU-SP': application,
         'X-TURKU-TS': timestamp
     }
+
+
+def get_ar_resource(resource_name):
+    url = "{}{}".format(ACCESSIBILITY_BASE_URL, resource_name)
+    return get_resource(url)
+
+
+def get_ar_servicepoint_resource(resource_name=None):
+    template_vars = [ACCESSIBILITY_BASE_URL, getattr(settings, 'ACCESSIBILITY_SYSTEM_ID', '')]
+    url_template = "{}servicepoints/{}"
+    if resource_name:
+        template_vars.append(resource_name)
+        url_template += '/{}'
+
+    url = url_template.format(*template_vars)
+    return get_resource(url)
+
+def get_ar_servicepoint_accessibility_resource(resource_name=None):
+    template_vars = [ACCESSIBILITY_BASE_URL, getattr(settings, 'ACCESSIBILITY_SYSTEM_ID', '')]
+    url_template = "{}accessibility/servicepoints/{}"
+    if resource_name:
+        template_vars.append(resource_name)
+        url_template += '/{}'
+
+    url = url_template.format(*template_vars)
+    return get_resource(url)
 
 
 def get_turku_resource(resource_name):
