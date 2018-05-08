@@ -1,8 +1,9 @@
-import re
 import os
 import requests
 from django.conf import settings
 from django.utils.http import urlencode
+
+from services.management.commands.utils.text import clean_text
 
 URL_BASE = 'http://www.hel.fi/palvelukarttaws/rest/v4/'
 
@@ -42,22 +43,6 @@ def save_translated_field(obj, obj_field_name, info, info_field_name, max_length
         if lang == 'fi':
             setattr(obj, obj_field_name, val)
     return has_changed
-
-
-def clean_text(text):
-    if not isinstance(text, str):
-        return text
-    # remove consecutive whitespaces
-    text = re.sub(r'\s\s+', ' ', text, re.U)
-    # remove nil bytes
-    text = text.replace('\u0000', ' ')
-    text = text.replace("\r", "\n")
-    text = text.replace('\r', "\n")
-    text = text.replace('\\r', "\n")
-    text = text.strip()
-    if len(text) == 0:
-        return None
-    return text
 
 
 def postcodes():

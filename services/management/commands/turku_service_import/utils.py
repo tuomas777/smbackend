@@ -1,10 +1,11 @@
 import datetime
 import hashlib
 import os
-import re
 
 import requests
 from django.conf import settings
+
+from services.management.commands.utils.text import clean_text
 
 # TODO: Change to production endpoint when available
 TURKU_BASE_URL = 'https://testidigiaurajoki.turku.fi/kuntapalvelut/api/v1/'
@@ -96,22 +97,6 @@ def set_field(obj, obj_field_name, entry, entry_field_name):
 
     setattr(obj, obj_field_name, entry_value)
     return True
-
-
-def clean_text(text):
-    if not isinstance(text, str):
-        return text
-    # remove consecutive whitespaces
-    text = re.sub(r'\s\s+', ' ', text, re.U)
-    # remove nil bytes
-    text = text.replace('\u0000', ' ')
-    text = text.replace("\r", "\n")
-    text = text.replace('\r', "\n")
-    text = text.replace('\\r', "\n")
-    text = text.strip()
-    if len(text) == 0:
-        return None
-    return text
 
 
 def postcodes():
