@@ -71,6 +71,7 @@ class UnitSearchManager(models.GeoManager):
 
 class Unit(models.Model):
     id = models.IntegerField(primary_key=True)
+    ptv_id = models.UUIDField(null=True, db_index=True, unique=True)
 
     public = models.BooleanField(null=False, default=True)
 
