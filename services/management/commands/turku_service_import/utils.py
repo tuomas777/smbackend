@@ -68,7 +68,9 @@ def get_turku_resource(resource_name):
 
 def set_tku_translated_field(obj, obj_field_name, entry, entry_field_name, max_length=None):
     has_changed = False
-    field_data = entry[entry_field_name]
+    field_data = entry.get(entry_field_name)
+    if not field_data:
+        return has_changed
 
     for language, raw_value in field_data.items():
         value = clean_text(raw_value)
