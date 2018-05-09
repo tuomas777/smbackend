@@ -36,7 +36,7 @@ class Command(BaseCommand):
 
     @db.transaction.atomic
     def import_services(self):
-        return import_services(logger=self.logger, noop=False, importer=self)
+        return import_services(logger=self.logger, importer=self)
 
     # Activate the default language for the duration of the import
     # to make sure translated fields are populated correctly.
