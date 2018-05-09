@@ -5,7 +5,7 @@ from munigeo.importer.sync import ModelSyncher
 
 from services.management.commands.services_import.keyword import KeywordHandler
 from services.management.commands.turku_service_import.utils import set_tku_translated_field, set_field, \
-    get_turku_resource
+    get_turku_resource, set_syncher_object_field, set_syncher_tku_translated_field
 from services.models import ServiceNode, Service
 
 UTC_TIMEZONE = pytz.timezone('UTC')
@@ -73,11 +73,8 @@ class ServiceImporter:
             obj._changed = True
 
         obj.name = node['nimi']
-        if set_field(obj, 'name', node, 'nimi'):
-            obj._changed = True
-
-        if set_field(obj, 'name_fi', node, 'nimi'):
-            obj._changed = True
+        set_syncher_object_field(obj, 'name', node, 'nimi')
+        set_syncher_object_field(obj, 'name_fi', node, 'nimi')
 
         if 'ylatason_koodi' in node:
             parent = self.nodesyncher.get(node['ylatason_koodi'])
@@ -116,7 +113,7 @@ class ServiceImporter:
             )
             obj._changed = True
 
-        obj._changed |= set_tku_translated_field(obj, 'name', service, 'nimi_kieliversiot')
+        set_syncher_tku_translated_field(obj, 'name', service, 'nimi_kieliversiot')
 
         obj._changed = keyword_handler.sync_searchwords(obj, service, obj._changed)
         obj._changed |= self._update_object_unit_count(obj)

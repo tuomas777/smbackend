@@ -99,6 +99,14 @@ def set_field(obj, obj_field_name, entry, entry_field_name):
     return True
 
 
+def set_syncher_object_field(obj, obj_field_name, entry, entry_field_name):
+    obj._changed = set_field(obj, obj_field_name, entry, entry_field_name)
+
+
+def set_syncher_tku_translated_field(obj, obj_field_name, entry, entry_field_name, max_length=None):
+    obj._changed = set_tku_translated_field(obj, obj_field_name, entry, entry_field_name, max_length)
+
+
 def postcodes():
     path = os.path.join(settings.BASE_DIR, 'data', 'fi', 'postcodes.txt')
     _postcodes = {}
