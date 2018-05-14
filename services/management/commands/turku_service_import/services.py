@@ -21,8 +21,8 @@ class ServiceImporter:
 
     def import_services(self):
         keyword_handler = KeywordHandler(logger=self.logger)
-        self._import_service_nodes(keyword_handler)
         self._import_services(keyword_handler)
+        self._import_service_nodes(keyword_handler)
 
     def _import_service_nodes(self, keyword_handler):
         service_classes = get_turku_resource('palveluluokat')
@@ -88,12 +88,35 @@ class ServiceImporter:
         obj._changed |= self._update_object_unit_count(obj)
         self._save_object(obj)
 
+        self._handle_related_services(obj, node)
+
         self.nodesyncher.mark(obj)
 
         for child_node in node['children']:
             latest_node_id = self._handle_service_node(child_node, keyword_handler, latest_node_id)
 
         return latest_node_id
+
+    def _handle_related_services(self, obj, node):
+        old_service_ids = set(obj.related_services.values_list('id', flat=True))
+        obj.related_services.clear()
+
+        for service_data in node.get('palvelut', []):
+            service_id = int(service_data.get('koodi'))
+
+            try:
+                service = Service.objects.get(id=service_id)
+            except Service.DoesNotExist:
+                # TODO fail the service node completely here?
+                self.logger.warning('Service "{}" does not exist!'.format(service_id))
+                continue
+
+            obj.related_services.add(service)
+
+        new_service_ids = set(obj.related_services.values_list('id', flat=True))
+
+        if old_service_ids != new_service_ids:
+            obj._changed = True
 
     def _update_object_unit_count(self, obj):
         unit_count = obj.get_unit_count()
