@@ -66,13 +66,13 @@ def get_turku_resource(resource_name):
     return get_resource(url, headers)
 
 
-def set_tku_translated_field(obj, obj_field_name, entry, entry_field_name, max_length=None):
-    has_changed = False
-    field_data = entry.get(entry_field_name)
-    if not field_data:
-        return has_changed
+def set_tku_translated_field(obj, obj_field_name, entry_data, max_length=None):
+    if not entry_data:
+        return False
 
-    for language, raw_value in field_data.items():
+    has_changed = False
+
+    for language, raw_value in entry_data.items():
         value = clean_text(raw_value)
 
         if max_length and value and len(value) > max_length:
@@ -83,30 +83,33 @@ def set_tku_translated_field(obj, obj_field_name, entry, entry_field_name, max_l
 
         if obj_value == value:
             continue
+
         has_changed = True
         setattr(obj, obj_key, value)
+
+    if has_changed:
+        obj._changed = True
+
     return has_changed
 
 
-def set_field(obj, obj_field_name, entry, entry_field_name):
-    entry_value = entry[entry_field_name]
+def set_field(obj, obj_field_name, entry_value):
     value = clean_text(entry_value)
-
     obj_value = getattr(obj, obj_field_name)
 
     if obj_value == value:
         return False
 
-    setattr(obj, obj_field_name, entry_value)
+    setattr(obj, obj_field_name, value)
     return True
 
 
-def set_syncher_object_field(obj, obj_field_name, entry, entry_field_name):
-    obj._changed = set_field(obj, obj_field_name, entry, entry_field_name)
+def set_syncher_object_field(obj, obj_field_name, value):
+    obj._changed |= set_field(obj, obj_field_name, value)
 
 
-def set_syncher_tku_translated_field(obj, obj_field_name, entry, entry_field_name, max_length=None):
-    obj._changed = set_tku_translated_field(obj, obj_field_name, entry, entry_field_name, max_length)
+def set_syncher_tku_translated_field(obj, obj_field_name, value, max_length=None):
+    obj._changed |= set_tku_translated_field(obj, obj_field_name, value, max_length)
 
 
 def postcodes():
