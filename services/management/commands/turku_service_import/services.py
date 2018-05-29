@@ -1,3 +1,4 @@
+import copy
 from datetime import datetime
 
 import pytz
@@ -10,6 +11,7 @@ from services.models import ServiceNode, Service
 
 UTC_TIMEZONE = pytz.timezone('UTC')
 
+SERVICE_AS_SERVICE_NODE_PREFIX = 'service_'
 
 class ServiceImporter:
     nodesyncher = ModelSyncher(ServiceNode.objects.all(), lambda obj: obj.ext_id)
@@ -59,22 +61,43 @@ class ServiceImporter:
         parent_classes['children'] = [s_cls for s_cls in service_classes if
                                       s_cls.get('ylatason_koodi') == parent_classes['koodi']]
 
+        # Add all "palvelut" as children
+        self._add_services_as_service_node_children(parent_classes)
+
         for child_ot in parent_classes['children']:
             self._add_service_tree_children(child_ot, service_classes)
 
+    def _add_services_as_service_node_children(self, parent_class):
+        # Copy services
+        # If this becomes a resource/performance problem then we can
+        # handle it by adding some check to _handle_related_services
+        # and other methods using the "palvelu" objects, but for now
+        # this keeps the code clean.
+        services = copy.deepcopy(parent_class.get('palvelut', []))
+
+        # Add them as service node children
+        for service in services:
+            service['koodi'] = '{}{}_{}'.format(SERVICE_AS_SERVICE_NODE_PREFIX, service['koodi'], parent_class['koodi'])
+            service['ylatason_koodi'] = parent_class['koodi']
+            parent_class['children'].append(service)
+
     def _handle_service_node(self, node, keyword_handler, latest_node_id):
-        obj = self.nodesyncher.get(node['koodi'])
+        node_id = node['koodi']
+        obj = self.nodesyncher.get(node_id)
         if not obj:
             latest_node_id += 1
             obj = ServiceNode(
                 id=latest_node_id,
-                ext_id=node['koodi']
+                ext_id=node_id
             )
             obj._changed = True
 
-        name = node.get('nimi')
-        set_syncher_object_field(obj, 'name', name)
-        set_syncher_object_field(obj, 'name_fi', name)
+        if 'nimi_kieliversiot' in node:
+            set_syncher_tku_translated_field(obj, 'name', node.get('nimi_kieliversiot'))
+        else:
+            name = node.get('nimi')
+            set_syncher_object_field(obj, 'name', name)
+            set_syncher_object_field(obj, 'name_fi', name)
 
         if 'ylatason_koodi' in node:
             parent = self.nodesyncher.get(node['ylatason_koodi'])
@@ -85,10 +108,10 @@ class ServiceImporter:
             obj.parent = parent
             obj._changed = True
 
-        obj._changed |= self._update_object_unit_count(obj)
         self._save_object(obj)
 
-        self._handle_related_services(obj, node)
+        if not node_id.startswith(SERVICE_AS_SERVICE_NODE_PREFIX):
+            self._handle_related_services(obj, node)
 
         self.nodesyncher.mark(obj)
 
@@ -139,7 +162,7 @@ class ServiceImporter:
         set_syncher_tku_translated_field(obj, 'name', service.get('nimi_kieliversiot'))
 
         obj._changed = keyword_handler.sync_searchwords(obj, service, obj._changed)
-        obj._changed |= self._update_object_unit_count(obj)
+        # obj._changed |= self._update_object_unit_count(obj)
 
         self._save_object(obj)
         self.servicesyncher.mark(obj)
