@@ -42,6 +42,8 @@ if settings.REST_FRAMEWORK and settings.REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES
 else:
     DEFAULT_RENDERERS = ()
 
+SERVICE_NODE_INT_ID = settings.SMBACKEND_INT_SERVICE_NODE_ID_IN_API
+
 # This allows us to find a serializer for Haystack search results
 serializers_by_model = {}
 
@@ -232,7 +234,12 @@ class DepartmentSerializer(TranslatedModelSerializer, MPTTModelSerializer, JSONA
 
 
 class ServiceNodeSerializer(TranslatedModelSerializer, MPTTModelSerializer, JSONAPISerializer):
-    children = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    if SERVICE_NODE_INT_ID:
+        id = serializers.IntegerField(read_only=True)
+        children = serializers.PrimaryKeyRelatedField(many=True, read_only=True, pk_field=serializers.IntegerField())
+        parent = serializers.PrimaryKeyRelatedField(read_only=True, pk_field=serializers.IntegerField())
+    else:
+        children = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
 
     def __init__(self, *args, **kwargs):
         super(ServiceNodeSerializer, self).__init__(*args, **kwargs)
@@ -246,9 +253,10 @@ class ServiceNodeSerializer(TranslatedModelSerializer, MPTTModelSerializer, JSON
             ret['ancestors'] = ser.data
         only_fields = self.context.get('only', [])
         if 'parent' in only_fields:
-            ret['parent'] = obj.parent_id
+            ret['parent'] = int(obj.parent_id) if SERVICE_NODE_INT_ID else obj.parent_id
         ret['period_enabled'] = obj.period_enabled()
-        ret['root'] = self.root_service_nodes(obj)
+        root = self.root_service_nodes(obj)
+        ret['root'] = int(root) if SERVICE_NODE_INT_ID else root
         ret['unit_count'] = dict(municipality=dict((
             (x.division.name_fi.lower() if x.division else '_unknown', x.count)
             for x in obj.unit_counts.all())))
@@ -542,7 +550,8 @@ class UnitSerializer(TranslatedModelSerializer, munigeo_api.GeoModelSerializer,
             if obj.root_service_nodes is None or obj.root_service_nodes == '':
                 ret['root_service_nodes'] = None
             else:
-                ret['root_service_nodes'] = [int(x) for x in obj.root_service_nodes.split(',')]
+                func = int if SERVICE_NODE_INT_ID else str
+                ret['root_service_nodes'] = [func(x) for x in obj.root_service_nodes.split(',')]
 
         include_fields = self.context.get('include', [])
         for field in ['department', 'root_department']:
@@ -566,9 +575,9 @@ class UnitSerializer(TranslatedModelSerializer, munigeo_api.GeoModelSerializer,
                 for lang in LANGUAGES:
                     name[lang] = getattr(s, 'name_{0}'.format(lang))
                 data = {
-                    'id': s.id,
+                    'id': int(s.id) if SERVICE_NODE_INT_ID else s.id,
                     'name': name,
-                    'root': root_node.id,
+                    'root': int(root_node.id) if SERVICE_NODE_INT_ID else root_node.id,
                     'service_reference': s.service_reference
                 }
                 # if s.identical_to:
@@ -716,7 +725,7 @@ class UnitViewSet(munigeo_api.GeoModelAPIView, JSONAPIViewSet, viewsets.ReadOnly
             srv_list = set()
             for srv_id in service_node_ids:
                 srv_list |= set(ServiceNode.objects.all().by_ancestor(srv_id).values_list('id', flat=True))
-                srv_list.add(int(srv_id))
+                srv_list.add(int(srv_id) if SERVICE_NODE_INT_ID else srv_id)
             return list(srv_list)
 
         service_nodes = filters.get('service_node', None)

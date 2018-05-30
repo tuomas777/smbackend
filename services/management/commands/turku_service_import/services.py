@@ -1,4 +1,5 @@
 import copy
+import json
 from datetime import datetime
 
 import pytz
@@ -13,8 +14,9 @@ UTC_TIMEZONE = pytz.timezone('UTC')
 
 SERVICE_AS_SERVICE_NODE_PREFIX = 'service_'
 
+
 class ServiceImporter:
-    nodesyncher = ModelSyncher(ServiceNode.objects.all(), lambda obj: obj.ext_id)
+    nodesyncher = ModelSyncher(ServiceNode.objects.all(), lambda obj: obj.id)
     servicesyncher = ModelSyncher(Service.objects.all(), lambda obj: obj.id)
 
     def __init__(self, logger=None, importer=None):
@@ -28,17 +30,15 @@ class ServiceImporter:
 
     def _import_service_nodes(self, keyword_handler):
         service_classes = get_turku_resource('palveluluokat')
+
         tree = self._build_servicetree(service_classes)
         for parent_node in tree:
-            latest_node_id = 0
-            latest_node = ServiceNode.objects.order_by('id').last()
-            if latest_node:
-                latest_node_id = latest_node.id
-            self._handle_service_node(parent_node, keyword_handler, latest_node_id)
+            self._handle_service_node(parent_node, keyword_handler)
         self.nodesyncher.finish()
 
     def _import_services(self, keyword_handler):
         services = get_turku_resource('palvelut')
+
         for service in services:
             self._handle_service(service, keyword_handler)
         self.servicesyncher.finish()
@@ -81,15 +81,11 @@ class ServiceImporter:
             service['ylatason_koodi'] = parent_class['koodi']
             parent_class['children'].append(service)
 
-    def _handle_service_node(self, node, keyword_handler, latest_node_id):
+    def _handle_service_node(self, node, keyword_handler):
         node_id = node['koodi']
         obj = self.nodesyncher.get(node_id)
         if not obj:
-            latest_node_id += 1
-            obj = ServiceNode(
-                id=latest_node_id,
-                ext_id=node_id
-            )
+            obj = ServiceNode(id=node_id)
             obj._changed = True
 
         if 'nimi_kieliversiot' in node:
@@ -112,13 +108,13 @@ class ServiceImporter:
 
         if not node_id.startswith(SERVICE_AS_SERVICE_NODE_PREFIX):
             self._handle_related_services(obj, node)
+        else:
+            set_syncher_object_field(obj, 'service_reference', node['koodi'])
 
         self.nodesyncher.mark(obj)
 
         for child_node in node['children']:
-            latest_node_id = self._handle_service_node(child_node, keyword_handler, latest_node_id)
-
-        return latest_node_id
+            self._handle_service_node(child_node, keyword_handler)
 
     def _handle_related_services(self, obj, node):
         old_service_ids = set(obj.related_services.values_list('id', flat=True))
@@ -141,13 +137,6 @@ class ServiceImporter:
         if old_service_ids != new_service_ids:
             obj._changed = True
 
-    def _update_object_unit_count(self, obj):
-        unit_count = obj.get_unit_count()
-        if obj.unit_count != unit_count:
-            obj.unit_count = unit_count
-            return True
-        return False
-
     def _handle_service(self, service, keyword_handler):
         koodi = int(service['koodi'])  # Cast to int as koodi should always be a stringified integer
         obj = self.servicesyncher.get(koodi)
@@ -162,7 +151,6 @@ class ServiceImporter:
         set_syncher_tku_translated_field(obj, 'name', service.get('nimi_kieliversiot'))
 
         obj._changed = keyword_handler.sync_searchwords(obj, service, obj._changed)
-        # obj._changed |= self._update_object_unit_count(obj)
 
         self._save_object(obj)
         self.servicesyncher.mark(obj)
