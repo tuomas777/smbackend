@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 import pytz
@@ -5,9 +6,10 @@ from django.conf import settings
 from django.contrib.gis.geos import Point, Polygon
 from munigeo.importer.sync import ModelSyncher
 
+from services.management.commands.services_import.services import update_service_node_counts
 from services.management.commands.turku_service_import.utils import set_syncher_object_field, \
     set_syncher_tku_translated_field, get_turku_resource
-from services.models import Service, ServiceNode, Unit, UnitServiceDetails
+from services.models import Service, ServiceNode, Unit, UnitServiceDetails, UnitIdentifier
 
 UTC_TIMEZONE = pytz.timezone('UTC')
 
@@ -43,12 +45,14 @@ class UnitImporter:
 
         self.unitsyncher.finish()
 
+        update_service_node_counts()
+
     def _handle_unit(self, unit_data):
         unit_id = int(unit_data['koodi'])
         state = unit_data['tila'].get('koodi')
 
         if state != '1':
-            self.logger.debug('Skipping unit "{}" state "{}".'.format(unit_id, state))
+            self.logger.debug('Skipping service point "{}" state "{}".'.format(unit_id, state))
             return
 
         obj = self.unitsyncher.get(unit_id)
@@ -57,10 +61,9 @@ class UnitImporter:
             obj._changed = True
 
         self._handle_root_fields(obj, unit_data)
-
         self._handle_location(obj, unit_data)
-
         self._handle_extra_info(obj, unit_data)
+        self._handle_ptv_id(obj, unit_data)
         self._save_object(obj)
 
         self._handle_services_and_service_nodes(obj, unit_data)
@@ -119,6 +122,8 @@ class UnitImporter:
             set_syncher_tku_translated_field(obj, 'address_postal_full', full_postal_address)
 
     def _handle_extra_info(self, obj, unit_data):
+        # TODO handle existing extra data erasing when needed
+
         location_data = unit_data.get('fyysinenPaikka')
         if not location_data:
             return
@@ -130,6 +135,18 @@ class UnitImporter:
             except KeyError:
                 continue
             self._update_fields(obj, extra_info_data, field_mapping)
+
+    def _handle_ptv_id(self, obj, unit_data):
+        ptv_id = unit_data.get('ptv_id')
+
+        if ptv_id:
+            created, _ = UnitIdentifier.objects.get_or_create(namespace='ptv', value=ptv_id, unit=obj)
+            if created:
+                obj._changed = True
+        else:
+            num_of_deleted, _ = UnitIdentifier.objects.filter(namespace='ptv', unit=obj).delete()
+            if num_of_deleted:
+                obj._changed = True
 
     def _handle_services_and_service_nodes(self, obj, unit_data):
         old_service_ids = set(obj.services.values_list('id', flat=True))
@@ -157,6 +174,8 @@ class UnitImporter:
 
         if old_service_ids != new_service_ids or old_service_node_ids != new_service_node_ids:
             obj._changed = True
+
+        set_syncher_object_field(obj, 'root_service_nodes', ','.join(str(x) for x in obj.get_root_service_nodes()))
 
     @staticmethod
     def _update_fields(obj, imported_data, field_mapping):
