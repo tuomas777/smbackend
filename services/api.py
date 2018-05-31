@@ -47,6 +47,8 @@ serializers_by_model = {}
 
 all_views = []
 
+USE_SERVICE_NODE_EXT_ID = settings.SMBACKEND_USE_SERVICE_NODE_EXT_ID_IN_API
+
 
 def register_view(klass, name, base_name=None):
     entry = {'class': klass, 'name': name}
@@ -188,9 +190,7 @@ def root_services(services):
 def root_service_nodes(services):
     # check this
     tree_ids = set(s.tree_id for s in services)
-    return map(lambda x: x.id,
-               ServiceNode.objects.filter(level=0).filter(
-                   tree_id__in=tree_ids))
+    return ServiceNode.objects.filter(level=0).filter(tree_id__in=tree_ids)
 
 
 class JSONAPISerializer(serializers.ModelSerializer):
@@ -232,7 +232,12 @@ class DepartmentSerializer(TranslatedModelSerializer, MPTTModelSerializer, JSONA
 
 
 class ServiceNodeSerializer(TranslatedModelSerializer, MPTTModelSerializer, JSONAPISerializer):
-    children = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    if USE_SERVICE_NODE_EXT_ID:
+        id = serializers.CharField(read_only=True, source='ext_id')
+        parent = serializers.SlugRelatedField(slug_field='ext_id', read_only=True)
+        children = serializers.SlugRelatedField(slug_field='ext_id', many=True, read_only=True)
+    else:
+        children = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
 
     def __init__(self, *args, **kwargs):
         super(ServiceNodeSerializer, self).__init__(*args, **kwargs)
@@ -248,7 +253,8 @@ class ServiceNodeSerializer(TranslatedModelSerializer, MPTTModelSerializer, JSON
         if 'parent' in only_fields:
             ret['parent'] = obj.parent_id
         ret['period_enabled'] = obj.period_enabled()
-        ret['root'] = self.root_service_nodes(obj)
+        root = self.root_service_nodes(obj)
+        ret['root'] = root.ext_id if USE_SERVICE_NODE_EXT_ID else root.id
         ret['unit_count'] = dict(municipality=dict((
             (x.division.name_fi.lower() if x.division else '_unknown', x.count)
             for x in obj.unit_counts.all())))
@@ -259,7 +265,7 @@ class ServiceNodeSerializer(TranslatedModelSerializer, MPTTModelSerializer, JSON
         return ret
 
     def root_service_nodes(self, obj):
-        return next(root_service_nodes([obj]))
+        return root_service_nodes([obj]).first()
 
     class Meta:
         model = ServiceNode
@@ -425,15 +431,24 @@ class ServiceNodeViewSet(JSONAPIViewSet, viewsets.ReadOnlyModelViewSet):
     serializer_class = ServiceNodeSerializer
     filter_backends = (DjangoFilterBackend,)
     filter_fields = ['level', 'parent']
+    lookup_field = 'ext_id' if USE_SERVICE_NODE_EXT_ID else 'id'
 
     def get_queryset(self):
         queryset = super(ServiceNodeViewSet, self).get_queryset().prefetch_related('keywords', 'related_services', 'unit_counts', 'unit_counts__division')
         args = self.request.query_params
         if 'id' in args:
             id_list = args['id'].split(',')
-            queryset = queryset.filter(id__in=id_list)
+            if USE_SERVICE_NODE_EXT_ID:
+                queryset = queryset.filter(id__in=id_list)
+            else:
+                queryset = queryset.filter(ext_id__in=id_list)
         if 'ancestor' in args:
             val = args['ancestor']
+            if USE_SERVICE_NODE_EXT_ID:
+                try:
+                    val = ServiceNode.objects.get(ext_id=val).id
+                except ServiceNode.DoesNotExist:
+                    val = 0
             queryset = queryset.by_ancestor(val)
         return queryset
 
@@ -468,6 +483,9 @@ class UnitSerializer(TranslatedModelSerializer, munigeo_api.GeoModelSerializer,
     provider_type = serializers.SerializerMethodField()
     organizer_type = serializers.SerializerMethodField()
     contract_type = serializers.SerializerMethodField()
+
+    if USE_SERVICE_NODE_EXT_ID:
+        service_nodes = serializers.SlugRelatedField('ext_id', many=True, read_only=True)
 
     def __init__(self, *args, **kwargs):
         super(UnitSerializer, self).__init__(*args, **kwargs)
@@ -542,7 +560,8 @@ class UnitSerializer(TranslatedModelSerializer, munigeo_api.GeoModelSerializer,
             if obj.root_service_nodes is None or obj.root_service_nodes == '':
                 ret['root_service_nodes'] = None
             else:
-                ret['root_service_nodes'] = [int(x) for x in obj.root_service_nodes.split(',')]
+                func = str if USE_SERVICE_NODE_EXT_ID else int
+                ret['root_service_nodes'] = [func(x) for x in obj.root_service_nodes.split(',')]
 
         include_fields = self.context.get('include', [])
         for field in ['department', 'root_department']:
@@ -566,9 +585,9 @@ class UnitSerializer(TranslatedModelSerializer, munigeo_api.GeoModelSerializer,
                 for lang in LANGUAGES:
                     name[lang] = getattr(s, 'name_{0}'.format(lang))
                 data = {
-                    'id': s.id,
+                    'id': s.ext_id if USE_SERVICE_NODE_EXT_ID else s.id,
                     'name': name,
-                    'root': root_node.id,
+                    'root': root_node.ext_id if USE_SERVICE_NODE_EXT_ID else root_node.id,
                     'service_reference': s.service_reference
                 }
                 # if s.identical_to:
@@ -729,6 +748,8 @@ class UnitViewSet(munigeo_api.GeoModelAPIView, JSONAPIViewSet, viewsets.ReadOnly
             if level_specs['type'] == 'include':
                 service_node_ids = level_specs['service_nodes']
         if service_node_ids:
+            if USE_SERVICE_NODE_EXT_ID:
+                service_node_ids = ServiceNode.objects.filter(ext_id__in=service_node_ids).values_list('id', flat=True)
             queryset = queryset.filter(service_nodes__in=service_nodes_by_ancestors(service_node_ids)).distinct()
 
         service_node_ids = None
@@ -740,6 +761,8 @@ class UnitViewSet(munigeo_api.GeoModelAPIView, JSONAPIViewSet, viewsets.ReadOnly
             if level_specs['type'] == 'exclude':
                 service_node_ids = level_specs['service_nodes']
         if service_node_ids:
+            if USE_SERVICE_NODE_EXT_ID:
+                service_node_ids = ServiceNode.objects.filter(ext_id__in=service_node_ids).values_list('id', flat=True)
             queryset = queryset.exclude(service_nodes__in=service_nodes_by_ancestors(service_node_ids)).distinct()
 
         services = filters.get('service')

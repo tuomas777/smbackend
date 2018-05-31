@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.core.validators import validate_comma_separated_integer_list
 from django.contrib.gis.db import models
 from django.contrib.postgres.fields import JSONField
@@ -151,5 +152,6 @@ class Unit(models.Model):
 
         tree_ids = self.service_nodes.all().values_list('tree_id', flat=True).distinct()
         qs = ServiceNode.objects.filter(level=0).filter(tree_id__in=list(tree_ids))
-        service_node_list = qs.values_list('id', flat=True).distinct()
+        field = 'ext_id' if settings.SMBACKEND_USE_SERVICE_NODE_EXT_ID_IN_API else 'id'
+        service_node_list = qs.values_list(field, flat=True).distinct()
         return sorted(service_node_list)
