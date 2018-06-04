@@ -10,7 +10,7 @@ from munigeo.models import AdministrativeDivisionType, AdministrativeDivision
 
 
 class ServiceNode(MPTTModel):
-    id = models.IntegerField(primary_key=True)
+    id = models.CharField(db_index=True, max_length=200, blank=True, primary_key=True)
     ext_id = models.CharField(db_index=True, max_length=200, blank=True)
     name = models.CharField(max_length=200, db_index=True)
     parent = TreeForeignKey('self', null=True, related_name='children')
