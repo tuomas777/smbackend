@@ -8,13 +8,14 @@ from django.core.management.base import BaseCommand
 from django.utils import translation
 
 from services.management.commands.turku_service_import.accessibility import import_accessibility
+from services.management.commands.turku_service_import.addresses import import_addresses
 from services.management.commands.turku_service_import.services import import_services
 from services.management.commands.turku_service_import.units import import_units
 
 
 class Command(BaseCommand):
     help = "Import services from City of Turku APIs"
-    importer_types = ['services', 'accessibility', 'units']
+    importer_types = ['services', 'accessibility', 'units', 'addresses']
 
     supported_languages = [l[0] for l in settings.LANGUAGES]
 
@@ -48,6 +49,10 @@ class Command(BaseCommand):
     @db.transaction.atomic
     def import_units(self):
         return import_units(logger=self.logger, importer=self)
+
+    @db.transaction.atomic
+    def import_addresses(self):
+        return import_addresses(logger=self.logger)
 
     # Activate the default language for the duration of the import
     # to make sure translated fields are populated correctly.
