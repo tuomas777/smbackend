@@ -39,7 +39,7 @@ class AddressImporter:
             if row['municipality'].lower() not in self.valid_municipalities:
                 continue
 
-            coordinates = row['longitude'] + row['latitude']
+            coordinates = row['y'] + row['x']
             if coordinates not in multi_lingual_addresses:
                 multi_lingual_addresses[coordinates] = {
                     'street': {
@@ -61,7 +61,7 @@ class AddressImporter:
                 # for the Finnish street name as well since that is most likely an
                 # expected value. If there is a Finnish name for the coordinates lower
                 # down in the coordinate list then the Finnish name will be overridden.
-                if 'name' not in multi_lingual_addresses[coordinates]['street']:
+                if 'name_fi' not in multi_lingual_addresses[coordinates]['street']:
                     multi_lingual_addresses[coordinates]['street']['name_fi'] = row['street']
                 multi_lingual_addresses[coordinates]['street']['name_sv'] = row['street']
         return multi_lingual_addresses
