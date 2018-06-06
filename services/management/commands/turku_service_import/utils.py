@@ -66,14 +66,17 @@ def get_turku_resource(resource_name):
     return get_resource(url, headers)
 
 
-def set_tku_translated_field(obj, obj_field_name, entry_data, max_length=None):
+def set_tku_translated_field(obj, obj_field_name, entry_data, max_length=None, clean=True):
     if not entry_data:
         return False
 
     has_changed = False
 
     for language, raw_value in entry_data.items():
-        value = clean_text(raw_value)
+        if clean:
+            value = clean_text(raw_value)
+        else:
+            value = raw_value
 
         if max_length and value and len(value) > max_length:
             value = None
@@ -108,8 +111,8 @@ def set_syncher_object_field(obj, obj_field_name, value):
     obj._changed |= set_field(obj, obj_field_name, value)
 
 
-def set_syncher_tku_translated_field(obj, obj_field_name, value, max_length=None):
-    obj._changed |= set_tku_translated_field(obj, obj_field_name, value, max_length)
+def set_syncher_tku_translated_field(obj, obj_field_name, value, max_length=None, clean=True):
+    obj._changed |= set_tku_translated_field(obj, obj_field_name, value, max_length, clean)
 
 
 def postcodes():
