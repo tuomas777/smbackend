@@ -9,6 +9,7 @@ from munigeo.importer.sync import ModelSyncher
 from services.management.commands.services_import.services import update_service_node_counts
 from services.management.commands.turku_service_import.utils import set_syncher_object_field, \
     set_syncher_tku_translated_field, get_turku_resource
+from services.management.commands.utils.text import clean_text
 from services.models import Service, ServiceNode, Unit, UnitServiceDetails, UnitIdentifier
 
 UTC_TIMEZONE = pytz.timezone('UTC')
@@ -21,6 +22,12 @@ ROOT_FIELD_MAPPING = {
 
 EXTRA_INFO_FIELD_MAPPING = {
     '6': {'kuvaus_kieliversiot': 'www'},
+}
+
+SERVICE_TRANSLATIONS = {
+    'fi': 'Palvelut',
+    'sv': 'Tjänster',
+    'en': 'Services'
 }
 
 SOURCE_DATA_SRID = 4326
@@ -64,6 +71,7 @@ class UnitImporter:
         self._handle_location(obj, unit_data)
         self._handle_extra_info(obj, unit_data)
         self._handle_ptv_id(obj, unit_data)
+        self._handle_service_descriptions(obj, unit_data)
         self._save_object(obj)
 
         self._handle_services_and_service_nodes(obj, unit_data)
@@ -176,6 +184,43 @@ class UnitImporter:
             obj._changed = True
 
         set_syncher_object_field(obj, 'root_service_nodes', ','.join(str(x) for x in obj.get_root_service_nodes()))
+
+    def _handle_service_descriptions(self, obj, unit_data):
+        descriptions = {
+            'fi': getattr(unit_data, 'description_fi', ''),
+            'sv': getattr(unit_data, 'description_en', ''),
+            'en': getattr(unit_data, 'description_sv', ''),
+        }
+        touched = {
+            'fi': False,
+            'sv': False,
+            'en': False,
+        }
+
+        for service_offer in unit_data.get('palvelutarjoukset', []):
+            for service_data in service_offer.get('palvelut', []):
+
+                service_name = service_data.get('nimi_kieliversiot', {})
+                for language, value in service_name.items():
+                    # Make sure that we have a string as the default value
+                    if not descriptions[language]:
+                        descriptions[language] = ''
+
+                    if not touched[language]:
+                        # Clean the text
+                        descriptions[language] = clean_text(descriptions[language])
+                        # Add some padding if there is adescription already
+                        if descriptions[language]:
+                            descriptions[language] += '\n\n'
+                        descriptions[language] += SERVICE_TRANSLATIONS[language] + ':\n'
+                    else:
+                        # Add newline between services
+                        descriptions[language] += '\n'
+
+                    descriptions[language] += '- ' + value
+                    touched[language] = True
+
+        set_syncher_tku_translated_field(obj, 'description', descriptions, clean=False)
 
     @staticmethod
     def _update_fields(obj, imported_data, field_mapping):
