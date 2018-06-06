@@ -10,7 +10,7 @@ import mptt.fields
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('services', '0065_tune_unit_identifier'),
+        ('services', '0063_tune_unit_identifier'),
     ]
 
     operations = [
