@@ -2,7 +2,7 @@ from munigeo.importer.sync import ModelSyncher
 
 from services.management.commands.turku_service_import.utils import get_ar_resource, get_ar_servicepoint_resource, \
     get_ar_servicepoint_accessibility_resource
-from services.models import Unit, AccessibilityVariable, UnitAccessibilityProperty
+from services.models import AccessibilityVariable, UnitAccessibilityProperty, UnitIdentifier
 
 
 class AccessibilityImporter:
@@ -47,13 +47,14 @@ class AccessibilityImporter:
 
         service_points = get_ar_servicepoint_resource()
         for service_point in service_points:
-            unit_ptv_id = service_point.get('servicePointId')
-            if not unit_ptv_id:
+            ptv_id = service_point.get('servicePointId')
+            if not ptv_id:
                 continue
 
             try:
-                unit = Unit.objects.get(ptv_id=unit_ptv_id)
-            except Unit.DoesNotExist:
+                unit_identifier = UnitIdentifier.objects.get(namespace='ptv', value=ptv_id)
+                unit = unit_identifier.unit
+            except UnitIdentifier.DoesNotExist:
                 continue
 
             changed = self._set_unit_accesibility_properties(unit, service_point)
@@ -73,29 +74,30 @@ class AccessibilityImporter:
         accessibility_properties = get_ar_servicepoint_accessibility_resource('properties')
         for accessibility_property in accessibility_properties:
             # Make sure that we have all the necessary property attributes
-            unit_id = accessibility_property.get('servicePointId')
+            ptv_id = accessibility_property.get('servicePointId')
             accessibility_variable_id = accessibility_property.get('variableId')
             accessibility_variable_value = accessibility_property.get('value')
-            if not (unit_id and accessibility_variable_id and accessibility_variable_value):
+            if not (ptv_id and accessibility_variable_id and accessibility_variable_value):
                 continue
 
             # No need to check further if the unit has already been marked as non-existing
-            if unit_id in unit_skip_list:
+            if ptv_id in unit_skip_list:
                 continue
 
             # Make sure that the unit exists
             try:
                 # TODO: Optimize this if it gets too slow
                 # One way is to get all unit ids in one go and make a lookup table
-                unit = Unit.objects.get(ptv_id=unit_id)
-            except Unit.DoesNotExist:
-                self.logger.info("Unit {} does not exist, skipping".format(unit_id))
-                unit_skip_list.add(unit_id)
+                unit_identifier = UnitIdentifier.objects.get(namespace='ptv', value=ptv_id)
+                unit = unit_identifier.unit
+            except UnitIdentifier.DoesNotExist:
+                self.logger.info("Unit {} does not exist, skipping".format(ptv_id))
+                unit_skip_list.add(ptv_id)
                 continue
 
             # Make sure that the variable exists
             if accessibility_variable_id not in self._accessibility_variables:
-                self.logger.info("No variable {}, skipping".format(unit_id))
+                self.logger.info("No variable {}, skipping".format(ptv_id))
                 continue
 
             # Create or update the property including its associated value
