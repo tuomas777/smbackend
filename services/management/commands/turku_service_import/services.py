@@ -1,5 +1,3 @@
-import copy
-import json
 from datetime import datetime
 
 import pytz
@@ -61,25 +59,8 @@ class ServiceImporter:
         parent_classes['children'] = [s_cls for s_cls in service_classes if
                                       s_cls.get('ylatason_koodi') == parent_classes['koodi']]
 
-        # Add all "palvelut" as children
-        self._add_services_as_service_node_children(parent_classes)
-
         for child_ot in parent_classes['children']:
             self._add_service_tree_children(child_ot, service_classes)
-
-    def _add_services_as_service_node_children(self, parent_class):
-        # Copy services
-        # If this becomes a resource/performance problem then we can
-        # handle it by adding some check to _handle_related_services
-        # and other methods using the "palvelu" objects, but for now
-        # this keeps the code clean.
-        services = copy.deepcopy(parent_class.get('palvelut', []))
-
-        # Add them as service node children
-        for service in services:
-            service['koodi'] = '{}{}_{}'.format(SERVICE_AS_SERVICE_NODE_PREFIX, service['koodi'], parent_class['koodi'])
-            service['ylatason_koodi'] = parent_class['koodi']
-            parent_class['children'].append(service)
 
     def _handle_service_node(self, node, keyword_handler):
         node_id = node['koodi']
