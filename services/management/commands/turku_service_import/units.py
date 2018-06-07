@@ -208,7 +208,7 @@ class UnitImporter:
 
                     if not touched[language]:
                         # Clean the text
-                        descriptions[language] = clean_text(descriptions[language])
+                        descriptions[language] = clean_text(descriptions[language], '')
                         # Add some padding if there is adescription already
                         if descriptions[language]:
                             descriptions[language] += '\n\n'
