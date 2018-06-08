@@ -5,7 +5,6 @@ from .keyword import Keyword
 
 class Service(models.Model):
     id = models.IntegerField(primary_key=True)
-    ext_id = models.CharField(db_index=True, max_length=200, blank=True)
     name = models.CharField(max_length=200, db_index=True)
 
     keywords = models.ManyToManyField(Keyword)
