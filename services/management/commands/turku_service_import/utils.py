@@ -8,7 +8,7 @@ from django.conf import settings
 from services.management.commands.utils.text import clean_text
 
 # TODO: Change to production endpoint when available
-TURKU_BASE_URL = 'https://testidigiaurajoki.turku.fi/kuntapalvelut/api/v1/'
+TURKU_BASE_URL = 'https://digiaurajoki.turku.fi:9443/kuntapalvelut/api/v1/'
 ACCESSIBILITY_BASE_URL = 'https://asiointi.hel.fi/kapaesteettomyys_testi/api/v1/'
 
 
