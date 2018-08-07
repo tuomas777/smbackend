@@ -49,6 +49,7 @@ def get_ar_servicepoint_resource(resource_name=None):
     url = url_template.format(*template_vars)
     return get_resource(url)
 
+
 def get_ar_servicepoint_accessibility_resource(resource_name=None):
     template_vars = [ACCESSIBILITY_BASE_URL, getattr(settings, 'ACCESSIBILITY_SYSTEM_ID', '')]
     url_template = "{}accessibility/servicepoints/{}"
@@ -123,3 +124,7 @@ def postcodes():
         code, muni = l.split(',')
         _postcodes[code] = muni.strip()
     return _postcodes
+
+
+def nl2br(string):
+    return '<br>'.join(string.splitlines())

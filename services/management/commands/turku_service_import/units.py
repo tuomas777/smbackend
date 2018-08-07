@@ -1,4 +1,3 @@
-import json
 from datetime import datetime
 
 import pytz
@@ -7,8 +6,9 @@ from django.contrib.gis.geos import Point, Polygon
 from munigeo.importer.sync import ModelSyncher
 
 from services.management.commands.services_import.services import update_service_node_counts
-from services.management.commands.turku_service_import.utils import set_syncher_object_field, \
-    set_syncher_tku_translated_field, get_turku_resource
+from services.management.commands.turku_service_import.utils import (
+    get_turku_resource, nl2br, set_syncher_object_field, set_syncher_tku_translated_field
+)
 from services.management.commands.utils.text import clean_text
 from services.models import Service, ServiceNode, Unit, UnitServiceDetails, UnitIdentifier
 
@@ -187,7 +187,7 @@ class UnitImporter:
 
     def _handle_service_descriptions(self, obj, unit_data):
         description_data = unit_data.get('kuvaus_kieliversiot', {})
-        descriptions = {lang: description_data.get(lang, '') for lang in ('fi', 'sv', 'en')}
+        descriptions = {lang: nl2br(description_data.get(lang, '')) for lang in ('fi', 'sv', 'en')}
         touched = {
             'fi': False,
             'sv': False,
