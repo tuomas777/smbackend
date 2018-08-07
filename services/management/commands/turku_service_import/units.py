@@ -186,11 +186,8 @@ class UnitImporter:
         set_syncher_object_field(obj, 'root_service_nodes', ','.join(str(x) for x in obj.get_root_service_nodes()))
 
     def _handle_service_descriptions(self, obj, unit_data):
-        descriptions = {
-            'fi': getattr(unit_data, 'description_fi', ''),
-            'sv': getattr(unit_data, 'description_en', ''),
-            'en': getattr(unit_data, 'description_sv', ''),
-        }
+        description_data = unit_data.get('kuvaus_kieliversiot', {})
+        descriptions = {lang: description_data.get(lang, '') for lang in ('fi', 'sv', 'en')}
         touched = {
             'fi': False,
             'sv': False,
@@ -209,7 +206,7 @@ class UnitImporter:
                     if not touched[language]:
                         # Clean the text
                         descriptions[language] = clean_text(descriptions[language], '')
-                        # Add some padding if there is adescription already
+                        # Add some padding if there is a description already
                         if descriptions[language]:
                             descriptions[language] += '\n\n'
                         descriptions[language] += SERVICE_TRANSLATIONS[language] + ':\n'
