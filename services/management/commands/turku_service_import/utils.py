@@ -9,7 +9,7 @@ from services.management.commands.utils.text import clean_text
 
 # TODO: Change to production endpoint when available
 TURKU_BASE_URL = 'https://digiaurajoki.turku.fi:9443/kuntapalvelut/api/v1/'
-ACCESSIBILITY_BASE_URL = 'https://asiointi.hel.fi/kapaesteettomyys_testi/api/v1/'
+ACCESSIBILITY_BASE_URL = 'https://asiointi.hel.fi/kapaesteettomyys/api/v1/'
 
 
 def get_resource(url, headers=None):
