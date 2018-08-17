@@ -128,3 +128,17 @@ def postcodes():
 
 def nl2br(string):
     return '<br>'.join(string.splitlines())
+
+
+def get_weekday_str(index, lang='fi'):
+    assert 1 <= index <= 7 and lang in ('fi', 'sv', 'en')
+    weekdays = (
+        ('ma', 'mån', 'Mon'),
+        ('ti', 'tis', 'Tue'),
+        ('ke', 'ons', 'Wed'),
+        ('to', 'tor', 'Thu'),
+        ('pe', 'fre', 'Fri'),
+        ('la', 'lör', 'Sat'),
+        ('su', 'sön', 'Sun'),
+    )
+    return weekdays[index - 1][['fi', 'sv', 'en'].index(lang)]

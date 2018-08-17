@@ -1,16 +1,19 @@
-from datetime import datetime
+from collections import defaultdict, OrderedDict
+from datetime import date, datetime
 
 import pytz
 from django.conf import settings
 from django.contrib.gis.geos import Point, Polygon
+from django.utils import formats, translation
+from django.utils.dateparse import parse_date
 from munigeo.importer.sync import ModelSyncher
 
 from services.management.commands.services_import.services import update_service_node_counts
 from services.management.commands.turku_service_import.utils import (
-    get_turku_resource, nl2br, set_syncher_object_field, set_syncher_tku_translated_field
-)
+    get_turku_resource, nl2br, set_syncher_object_field, set_syncher_tku_translated_field,
+    get_weekday_str)
 from services.management.commands.utils.text import clean_text
-from services.models import Service, ServiceNode, Unit, UnitServiceDetails, UnitIdentifier
+from services.models import Service, ServiceNode, Unit, UnitServiceDetails, UnitIdentifier, UnitConnection
 
 UTC_TIMEZONE = pytz.timezone('UTC')
 
@@ -29,6 +32,37 @@ SERVICE_TRANSLATIONS = {
     'sv': 'Tjänster',
     'en': 'Services'
 }
+
+# Opening hours types
+NORMAL = 'normaali'
+NORMAL_EXTRA = 'normaali extra'
+SPECIAL = 'erityinen'
+EXCEPTION_OPEN = 'poikkeus avoinna'
+EXCEPTION_CLOSED = 'poikkeus suljettu'
+EXCEPTION = 'poikkeus'  # extra type that represents both exception types
+
+OPEN_STR = {
+    'fi': 'Avoinna',
+    'sv': 'Öppna',
+    'en': 'Open',
+}
+
+CLOSED_STR = {
+    'fi': 'suljettu',
+    'sv': 'stängt',
+    'en': 'closed',
+}
+
+SPECIAL_STR = {
+    'fi': 'Erityisaukiolo',
+    'sv': 'Specielt',
+    'en': 'Special opening hours',
+}
+
+# UnitConnection section type
+OPENING_HOURS_SECTION_TYPE = 5
+
+LANGUAGES = ('fi', 'sv', 'en')
 
 SOURCE_DATA_SRID = 4326
 
@@ -72,6 +106,7 @@ class UnitImporter:
         self._handle_extra_info(obj, unit_data)
         self._handle_ptv_id(obj, unit_data)
         self._handle_service_descriptions(obj, unit_data)
+        self._handle_opening_hours(obj, unit_data)
         self._save_object(obj)
 
         self._handle_services_and_service_nodes(obj, unit_data)
@@ -218,6 +253,138 @@ class UnitImporter:
                     touched[language] = True
 
         set_syncher_tku_translated_field(obj, 'description', descriptions, clean=False)
+
+    def _handle_opening_hours(self, obj, unit_data):
+        obj.connections.filter(section_type=OPENING_HOURS_SECTION_TYPE).delete()
+
+        try:
+            opening_hours_data = unit_data['fyysinenPaikka']['aukioloajat']
+        except KeyError:
+            self.logger.debug('Cannot find opening hours for unit {}'.format(unit_data.get('koodi')))
+            return
+
+        # Opening hours data will be stored in a complex structure where opening hours data is
+        # first grouped by type and then by Finnish name / title. Inside there each data entry
+        # localized name and description list. Example:
+        #
+        # {
+        #   'normaali': {
+        #       'Avoinna': (
+        #           {'fi': 'Avoinna', 'sv': 'Öppna', 'en': 'Open' },
+        #           ['fi': 'ma-pe 10:00-12:00', 'sv': 'mån-fre 10:00-12:00', 'en': 'Mon-Fri 10:00-12:00' }]
+        #       ),
+        #       '10.10.2020 Avoinna': (
+        #           {'fi': ... },
+        #           ['fi': ... }
+        #       )
+        #   },
+        #   'erityinen': {
+        #       ...
+        #   }
+        all_opening_hours = defaultdict(OrderedDict)
+
+        for opening_hours_datum in sorted(opening_hours_data, key=lambda x: x.get('voimassaoloAlkamishetki')):
+            opening_hours_type = opening_hours_datum['aukiolotyyppi']
+
+            start = parse_date(opening_hours_datum['voimassaoloAlkamishetki'])
+            end = parse_date(opening_hours_datum['voimassaoloPaattymishetki'])
+            today = date.today()
+            if start and start < today and end and end < today:
+                continue
+
+            opening_time = self._format_time(opening_hours_datum['avaamisaika'])
+            closing_time = self._format_time(opening_hours_datum['sulkemisaika'])
+
+            if not opening_time and not closing_time and not opening_hours_type == EXCEPTION_CLOSED:
+                continue
+
+            names = self._generate_name_for_opening_hours(opening_hours_datum)
+            weekday = opening_hours_datum['viikonpaiva']
+            opening_hours_value = {}
+
+            for language in LANGUAGES:
+                weekday_str = '-'.join([get_weekday_str(int(wd), language) if wd else '' for wd in weekday.split('-')])
+
+                if opening_hours_type == EXCEPTION_CLOSED:
+                    opening_hours_value[language] = ' '.join((weekday_str, CLOSED_STR[language]))
+                else:
+                    opening_hours_value[language] = '{} {}-{}'.format(weekday_str, opening_time, closing_time)
+
+            # map exception open and exception closed to the same slot to get them
+            # sorted by start dates rather than first all open and then all closed
+            if EXCEPTION in opening_hours_type:
+                opening_hours_type = EXCEPTION
+
+            # append new opening hours name and value to the complex structure
+            all_of_type = all_opening_hours.get(opening_hours_type, {})
+            data = all_of_type.get(names['fi'], ())
+            if not data:
+                data = (names, [opening_hours_value])
+            else:
+                if opening_hours_value not in data[1]:
+                    data[1].append(opening_hours_value)
+            all_opening_hours[opening_hours_type][names['fi']] = data
+
+        i = 0
+        for opening_hours_type in (NORMAL, NORMAL_EXTRA, SPECIAL, EXCEPTION):
+            for description, value in all_opening_hours[opening_hours_type].items():
+                UnitConnection.objects.create(
+                    unit=obj,
+                    name_fi='{} {}'.format(value[0]['fi'], ' '.join(v['fi'] for v in value[1])),
+                    name_sv='{} {}'.format(value[0]['sv'], ' '.join(v['sv'] for v in value[1])),
+                    name_en='{} {}'.format(value[0]['en'], ' '.join(v['en'] for v in value[1])),
+                    section_type=OPENING_HOURS_SECTION_TYPE,
+                    order=i,
+                )
+                i = i + 1
+
+    def _generate_name_for_opening_hours(self, opening_hours_datum):
+        opening_hours_type = opening_hours_datum['aukiolotyyppi']
+        names = defaultdict(str)
+
+        for language in LANGUAGES:
+            names[language] = opening_hours_datum.get('kuvaus_kieliversiot', {}).get(language, '')
+
+        if not names['sv']:
+            names['sv'] = names['en'] or names['fi']
+        if not names['en']:
+            names['en'] = names['sv'] or names['fi']
+        if not names['fi']:
+            names['fi'] = names['sv'] or names['en']
+
+        for language in LANGUAGES:
+            if not names[language]:
+                if opening_hours_type == SPECIAL:
+                    names[language] = SPECIAL_STR[language]
+                elif opening_hours_type in (NORMAL, NORMAL_EXTRA):
+                    names[language] = OPEN_STR[language]
+
+        start = parse_date(opening_hours_datum['voimassaoloAlkamishetki'])
+        end = parse_date(opening_hours_datum['voimassaoloPaattymishetki'])
+
+        if not start and not end:
+            return names
+
+        # if end < start assume it means just one day (start)
+        if end and start and end < start:
+            end = start
+
+        for language in LANGUAGES:
+            with translation.override(language):
+                start_str = formats.date_format(start, format='SHORT_DATE_FORMAT') if start else None
+                end_str = formats.date_format(end, format='SHORT_DATE_FORMAT') if end else None
+
+            dates = '{} - {}'.format(start_str, end_str) if start != end else start_str
+            names[language] = '{} {}'.format(dates, names[language]) if names[language] else dates
+
+        return names
+
+    def _format_time(self, time_str):
+        if not time_str:
+            return ''
+        parts = time_str.split(':')[:2]
+        parts[0] = str(int(parts[0]))
+        return ':'.join(parts)
 
     @staticmethod
     def _update_fields(obj, imported_data, field_mapping):
