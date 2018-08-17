@@ -28,9 +28,9 @@ EXTRA_INFO_FIELD_MAPPING = {
 }
 
 SERVICE_TRANSLATIONS = {
-    'fi': 'Palvelut',
-    'sv': 'Tjänster',
-    'en': 'Services'
+    'fi': '<b>Palvelut</b>',
+    'sv': '<b>Tjänster</b>',
+    'en': '<b>Services</b>'
 }
 
 # Opening hours types
@@ -308,7 +308,7 @@ class UnitImporter:
                 if opening_hours_type == EXCEPTION_CLOSED:
                     opening_hours_value[language] = ' '.join((weekday_str, CLOSED_STR[language]))
                 else:
-                    opening_hours_value[language] = '{} {}-{}'.format(weekday_str, opening_time, closing_time)
+                    opening_hours_value[language] = '{}&nbsp;{}-{}'.format(weekday_str, opening_time, closing_time)
 
             # map exception open and exception closed to the same slot to get them
             # sorted by start dates rather than first all open and then all closed
@@ -330,9 +330,9 @@ class UnitImporter:
             for description, value in all_opening_hours[opening_hours_type].items():
                 UnitConnection.objects.create(
                     unit=obj,
-                    name_fi='{} {}'.format(value[0]['fi'], ' '.join(v['fi'] for v in value[1])),
-                    name_sv='{} {}'.format(value[0]['sv'], ' '.join(v['sv'] for v in value[1])),
-                    name_en='{} {}'.format(value[0]['en'], ' '.join(v['en'] for v in value[1])),
+                    name_fi='<b>{}</b> {}'.format(value[0]['fi'], ' '.join(v['fi'] for v in value[1])),
+                    name_sv='<b>{}</b> {}'.format(value[0]['sv'], ' '.join(v['sv'] for v in value[1])),
+                    name_en='<b>{}</b> {}'.format(value[0]['en'], ' '.join(v['en'] for v in value[1])),
                     section_type=OPENING_HOURS_SECTION_TYPE,
                     order=i,
                 )
