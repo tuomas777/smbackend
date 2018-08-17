@@ -13,7 +13,7 @@ from munigeo.models import Municipality
 from services.management.commands.services_import.services import update_service_node_counts
 from services.management.commands.turku_service_import.utils import (
     get_turku_resource, nl2br, set_syncher_object_field, set_syncher_tku_translated_field,
-    get_weekday_str)
+    get_weekday_str, get_localized_value)
 from services.management.commands.utils.text import clean_text
 from services.models import Service, ServiceNode, Unit, UnitServiceDetails, UnitIdentifier, UnitConnection
 
@@ -61,7 +61,8 @@ SPECIAL_STR = {
     'en': 'Special opening hours',
 }
 
-# UnitConnection section type
+# UnitConnection section types
+PHONE_NUMBER_SECTION_TYPE = 1
 OPENING_HOURS_SECTION_TYPE = 5
 
 LANGUAGES = ('fi', 'sv', 'en')
@@ -116,9 +117,10 @@ class UnitImporter:
         self._handle_extra_info(obj, unit_data)
         self._handle_ptv_id(obj, unit_data)
         self._handle_service_descriptions(obj, unit_data)
-        self._handle_opening_hours(obj, unit_data)
         self._save_object(obj)
 
+        self._handle_opening_hours(obj, unit_data)
+        self._handle_phone_numbers(obj, unit_data)
         self._handle_services_and_service_nodes(obj, unit_data)
         self._save_object(obj)
 
@@ -342,7 +344,8 @@ class UnitImporter:
                     data[1].append(opening_hours_value)
             all_opening_hours[opening_hours_type][names['fi']] = data
 
-        i = 0
+        index = 0
+
         for opening_hours_type in (NORMAL, NORMAL_EXTRA, SPECIAL, EXCEPTION):
             for description, value in all_opening_hours[opening_hours_type].items():
                 UnitConnection.objects.create(
@@ -351,23 +354,57 @@ class UnitImporter:
                     name_sv='<b>{}</b> {}'.format(value[0]['sv'], ' '.join(v['sv'] for v in value[1])),
                     name_en='<b>{}</b> {}'.format(value[0]['en'], ' '.join(v['en'] for v in value[1])),
                     section_type=OPENING_HOURS_SECTION_TYPE,
-                    order=i,
+                    order=index,
                 )
-                i = i + 1
+                index += 1
+
+    def _handle_phone_numbers(self, obj, unit_data):
+        UnitConnection.objects.filter(unit=obj, section_type=PHONE_NUMBER_SECTION_TYPE).delete()
+
+        phone_number_data = unit_data.get('puhelinnumerot', [])
+        if not phone_number_data:
+            return
+
+        index = 0
+
+        for phone_number_datum in phone_number_data:
+            number_type = phone_number_datum.get('numerotyyppi')
+            descriptions = phone_number_datum.get('kuvaus_kieliversiot', {})
+            type_names = {
+                'fi': number_type.get('teksti_fi'),
+                'sv': number_type.get('teksti_sv'),
+                'en': number_type.get('teksti_en'),
+            }
+            names = {
+                'name_{}'.format(language):
+                get_localized_value(descriptions, language) or get_localized_value(type_names, language)
+                for language in LANGUAGES
+            }
+
+            UnitConnection.objects.get_or_create(
+                unit=obj,
+                section_type=PHONE_NUMBER_SECTION_TYPE,
+                phone=self._generate_phone_number(phone_number_datum),
+                order=index,
+                **names
+            )
+            index += 1
+
+    def _generate_phone_number(self, phone_number_datum):
+        if not phone_number_datum:
+            return ''
+
+        code = phone_number_datum['maakoodi']
+        number = phone_number_datum['numero']
+
+        return '0{}'.format(number) if code == '358' else '+{}{}'.format(code, number)
 
     def _generate_name_for_opening_hours(self, opening_hours_datum):
         opening_hours_type = opening_hours_datum['aukiolotyyppi']
         names = defaultdict(str)
 
         for language in LANGUAGES:
-            names[language] = opening_hours_datum.get('kuvaus_kieliversiot', {}).get(language, '')
-
-        if not names['sv']:
-            names['sv'] = names['en'] or names['fi']
-        if not names['en']:
-            names['en'] = names['sv'] or names['fi']
-        if not names['fi']:
-            names['fi'] = names['sv'] or names['en']
+            names[language] = get_localized_value(opening_hours_datum.get('kuvaus_kieliversiot', {}), language)
 
         for language in LANGUAGES:
             if not names[language]:

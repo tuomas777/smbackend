@@ -142,3 +142,13 @@ def get_weekday_str(index, lang='fi'):
         ('su', 'sön', 'Sun'),
     )
     return weekdays[index - 1][['fi', 'sv', 'en'].index(lang)]
+
+
+def get_localized_value(data, preferred_language='fi'):
+    assert preferred_language in ('fi', 'sv', 'en')
+    if preferred_language == 'fi':
+        return data.get('fi') or data.get('en') or data.get('sv') or ''
+    elif preferred_language == 'sv':
+        return data.get('sv') or data.get('fi') or data.get('en') or ''
+    else:
+        return data.get('en') or data.get('fi') or data.get('sv') or ''
