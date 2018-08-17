@@ -13,7 +13,7 @@ from munigeo.models import Municipality
 from services.management.commands.services_import.services import update_service_node_counts
 from services.management.commands.turku_service_import.utils import (
     get_turku_resource, nl2br, set_syncher_object_field, set_syncher_tku_translated_field,
-    get_weekday_str, get_localized_value)
+    get_weekday_str, get_localized_value_with_fallback)
 from services.management.commands.utils.text import clean_text
 from services.models import Service, ServiceNode, Unit, UnitServiceDetails, UnitIdentifier, UnitConnection
 
@@ -26,6 +26,7 @@ ROOT_FIELD_MAPPING = {
 }
 
 EXTRA_INFO_FIELD_MAPPING = {
+    '3': {'kuvaus_kieliversiot': 'www'},
     '6': {'kuvaus_kieliversiot': 'www'},
 }
 
@@ -377,7 +378,8 @@ class UnitImporter:
             }
             names = {
                 'name_{}'.format(language):
-                get_localized_value(descriptions, language) or get_localized_value(type_names, language)
+                    get_localized_value_with_fallback(descriptions, language) or
+                    get_localized_value_with_fallback(type_names, language)
                 for language in LANGUAGES
             }
 
@@ -396,15 +398,14 @@ class UnitImporter:
 
         code = phone_number_datum['maakoodi']
         number = phone_number_datum['numero']
-
-        return '0{}'.format(number) if code == '358' else '+{}{}'.format(code, number)
+        return '+{}{}'.format(code, number) if code else number
 
     def _generate_name_for_opening_hours(self, opening_hours_datum):
         opening_hours_type = opening_hours_datum['aukiolotyyppi']
         names = defaultdict(str)
 
         for language in LANGUAGES:
-            names[language] = get_localized_value(opening_hours_datum.get('kuvaus_kieliversiot', {}), language)
+            names[language] = get_localized_value_with_fallback(opening_hours_datum.get('kuvaus_kieliversiot', {}), language)
 
         for language in LANGUAGES:
             if not names[language]:

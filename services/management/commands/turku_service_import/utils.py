@@ -144,7 +144,7 @@ def get_weekday_str(index, lang='fi'):
     return weekdays[index - 1][['fi', 'sv', 'en'].index(lang)]
 
 
-def get_localized_value(data, preferred_language='fi'):
+def get_localized_value_with_fallback(data, preferred_language='fi'):
     assert preferred_language in ('fi', 'sv', 'en')
     if preferred_language == 'fi':
         return data.get('fi') or data.get('en') or data.get('sv') or ''
