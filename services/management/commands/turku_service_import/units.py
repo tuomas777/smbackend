@@ -1,5 +1,6 @@
 from collections import defaultdict, OrderedDict
 from datetime import date, datetime
+from functools import lru_cache
 
 import pytz
 from django.conf import settings
@@ -7,6 +8,7 @@ from django.contrib.gis.geos import Point, Polygon
 from django.utils import formats, translation
 from django.utils.dateparse import parse_date
 from munigeo.importer.sync import ModelSyncher
+from munigeo.models import Municipality
 
 from services.management.commands.services_import.services import update_service_node_counts
 from services.management.commands.turku_service_import.utils import (
@@ -69,6 +71,14 @@ SOURCE_DATA_SRID = 4326
 BOUNDING_BOX = Polygon.from_bbox(settings.BOUNDING_BOX)
 BOUNDING_BOX.set_srid(settings.DEFAULT_SRID)
 BOUNDING_BOX.transform(SOURCE_DATA_SRID)
+
+
+@lru_cache(None)
+def get_municipality(name):
+    try:
+        return Municipality.objects.get(name=name)
+    except Municipality.DoesNotExist:
+        return None
 
 
 class UnitImporter:
@@ -151,18 +161,25 @@ class UnitImporter:
             address_data = address_data_list[0]
 
             full_postal_address = {}
+            street = {'fi': address_data.get('katuosoite_fi')}
 
-            street_fi = address_data.get('katuosoite_fi')
             zip = address_data.get('postinumero')
             post_office_fi = address_data.get('postitoimipaikka_fi')
-            full_postal_address['fi'] = '{} {} {}'.format(street_fi, zip, post_office_fi)
+            full_postal_address['fi'] = '{} {} {}'.format(street['fi'], zip, post_office_fi)
 
             for language in ('sv', 'en'):
-                street = address_data.get('katuosoite_{}'.format(language)) or street_fi
+                street[language] = address_data.get('katuosoite_{}'.format(language)) or street['fi']
                 post_office = address_data.get('postitoimipaikka_{}'.format(language)) or post_office_fi
-                full_postal_address[language] = '{} {} {}'.format(street, zip, post_office)
+                full_postal_address[language] = '{} {} {}'.format(street[language], zip, post_office)
 
             set_syncher_tku_translated_field(obj, 'address_postal_full', full_postal_address)
+            set_syncher_tku_translated_field(obj, 'street_address', street)
+            set_syncher_object_field(obj, 'address_zip', zip)
+
+            municipality = get_municipality(address_data.get('kunta', {}).get('nimi_fi'))
+            if not municipality:
+                municipality = get_municipality(post_office_fi)
+            set_syncher_object_field(obj, 'municipality', municipality)
 
     def _handle_extra_info(self, obj, unit_data):
         # TODO handle existing extra data erasing when needed
