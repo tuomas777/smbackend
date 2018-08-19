@@ -63,7 +63,7 @@ SPECIAL_STR = {
 }
 
 # UnitConnection section types
-PHONE_NUMBER_SECTION_TYPE = 1
+PHONE_OR_EMAIL_SECTION_TYPE = 1
 OPENING_HOURS_SECTION_TYPE = 5
 
 LANGUAGES = ('fi', 'sv', 'en')
@@ -121,7 +121,7 @@ class UnitImporter:
         self._save_object(obj)
 
         self._handle_opening_hours(obj, unit_data)
-        self._handle_phone_numbers(obj, unit_data)
+        self._handle_email_and_phone_numbers(obj, unit_data)
         self._handle_services_and_service_nodes(obj, unit_data)
         self._save_object(obj)
 
@@ -323,12 +323,12 @@ class UnitImporter:
             opening_hours_value = {}
 
             for language in LANGUAGES:
-                weekday_str = '-'.join([get_weekday_str(int(wd), language) if wd else '' for wd in weekday.split('-')])
+                weekday_str = '–'.join([get_weekday_str(int(wd), language) if wd else '' for wd in weekday.split('-')])
 
                 if opening_hours_type == EXCEPTION_CLOSED:
                     opening_hours_value[language] = ' '.join((weekday_str, CLOSED_STR[language]))
                 else:
-                    opening_hours_value[language] = '{}&nbsp;{}-{}'.format(weekday_str, opening_time, closing_time)
+                    opening_hours_value[language] = '{}&nbsp;{}–{}'.format(weekday_str, opening_time, closing_time)
 
             # map exception open and exception closed to the same slot to get them
             # sorted by start dates rather than first all open and then all closed
@@ -349,24 +349,44 @@ class UnitImporter:
 
         for opening_hours_type in (NORMAL, NORMAL_EXTRA, SPECIAL, EXCEPTION):
             for description, value in all_opening_hours[opening_hours_type].items():
+                names = {}
+
+                for language in LANGUAGES:
+                    first_part = value[0]['fi']
+                    if opening_hours_type in (NORMAL, NORMAL_EXTRA, SPECIAL):
+                        first_part = '<b>{}</b>'.format(first_part)
+                    second_part = ' '.join(v[language] for v in value[1])
+                    names['name_{}'.format(language)] = '{} {}'.format(first_part, second_part)
+
                 UnitConnection.objects.create(
                     unit=obj,
-                    name_fi='<b>{}</b> {}'.format(value[0]['fi'], ' '.join(v['fi'] for v in value[1])),
-                    name_sv='<b>{}</b> {}'.format(value[0]['sv'], ' '.join(v['sv'] for v in value[1])),
-                    name_en='<b>{}</b> {}'.format(value[0]['en'], ' '.join(v['en'] for v in value[1])),
                     section_type=OPENING_HOURS_SECTION_TYPE,
                     order=index,
+                    **names
                 )
                 index += 1
 
-    def _handle_phone_numbers(self, obj, unit_data):
-        UnitConnection.objects.filter(unit=obj, section_type=PHONE_NUMBER_SECTION_TYPE).delete()
+    def _handle_email_and_phone_numbers(self, obj, unit_data):
+        UnitConnection.objects.filter(unit=obj, section_type=PHONE_OR_EMAIL_SECTION_TYPE).delete()
+
+        index = 0
+        email = unit_data.get('sahkoposti')
+
+        if email:
+            UnitConnection.objects.get_or_create(
+                unit=obj,
+                section_type=PHONE_OR_EMAIL_SECTION_TYPE,
+                email=email,
+                name_fi='Sähköposti',
+                name_sv='E-post',
+                name_en='Email',
+                order=index,
+            )
+            index += 1
 
         phone_number_data = unit_data.get('puhelinnumerot', [])
         if not phone_number_data:
             return
-
-        index = 0
 
         for phone_number_datum in phone_number_data:
             number_type = phone_number_datum.get('numerotyyppi')
@@ -385,7 +405,7 @@ class UnitImporter:
 
             UnitConnection.objects.get_or_create(
                 unit=obj,
-                section_type=PHONE_NUMBER_SECTION_TYPE,
+                section_type=PHONE_OR_EMAIL_SECTION_TYPE,
                 phone=self._generate_phone_number(phone_number_datum),
                 order=index,
                 **names
@@ -429,7 +449,20 @@ class UnitImporter:
                 start_str = formats.date_format(start, format='SHORT_DATE_FORMAT') if start else None
                 end_str = formats.date_format(end, format='SHORT_DATE_FORMAT') if end else None
 
-            dates = '{} - {}'.format(start_str, end_str) if start != end else start_str
+            # shorten start date string if it has the same year and/or month as end date,
+            # for example 5.7.2018 - 9.7.2018 becomes 5. - 9.7.2018
+            if language in ('fi', 'sv') and start_str and end_str and start_str != end_str:
+                original_start_str = start_str
+                if start.year == end.year:
+                    if start.month == end.month:
+                        start_str = '{}.'.format(original_start_str.split('.')[0])
+                    else:
+                        start_str = '.'.join(original_start_str.split('.')[:-1])
+
+            if start and end:
+                dates = '{}–{}'.format(start_str, end_str) if start != end else start_str
+            else:
+                dates = start_str or end_str
             names[language] = '{} {}'.format(dates, names[language]) if names[language] else dates
 
         return names
